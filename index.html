@@ -145,8 +145,12 @@
         #btnUsb { background: #4CAF50; color: white; }
         #btnBle { background: #2196F3; color: white; }
         
+        /* --- DUAL TELEMETRY TEXT STYLING --- */
         .status-text {
             margin-top: 10px; font-size: 14px; color: #888; font-family: monospace;
+        }
+        .debug-text {
+            margin-top: 6px; font-size: 12px; color: #4CAF50; font-family: monospace; opacity: 0.8;
         }
     </style>
 </head>
@@ -187,6 +191,7 @@
         <button id="btnBle" class="connect-btn" onclick="connectBLE()">📡 Wireless (BLE)</button>
     </div>
     <div id="statusText" class="status-text">Hardware Disconnected</div>
+    <div id="debugText" class="debug-text">Raw Pressure: 0% | [IDLE] | Count: 0/5</div>
 
     <script>
         // --- CALIBRATED STATE MACHINE VARIABLES ---
@@ -208,6 +213,7 @@
         const soundBtn = document.getElementById("soundBtn");
         
         const statusText = document.getElementById("statusText");
+        const debugText = document.getElementById("debugText"); // Added debug line reference
         const bottomText = document.getElementById("dynamicBottomText");
         const controls = document.getElementById("controls");
 
@@ -257,8 +263,9 @@
             if (breathCount >= MAX_BREATHS) return;
 
             let debugState = isDancing ? "[DANCING]" : (isArmed ? "[ARMED]" : "[IDLE]");
-            // Log to console instead of screen to preserve connection status text
-            console.log(`Raw Pressure: ${value}% | ${debugState} | Count: ${breathCount}/${MAX_BREATHS}`);
+            
+            // Output live data to the new dedicated UI line
+            debugText.innerText = `Raw Pressure: ${value}% | ${debugState} | Count: ${breathCount}/${MAX_BREATHS}`;
 
             if (isDancing) return; 
 
@@ -303,13 +310,10 @@
         }
 
         // --- 1. WIRED CONNECTION (WEB SERIAL) ---
-        // Note: Your ESP32 C++ code doesn't rapidly print the CSV to Serial for the game loop, 
-        // it only prints a diagnostic block every 2 seconds. 
-        // For actual gameplay, use the Bluetooth button!
         async function connectUSB() {
             try {
                 const port = await navigator.serial.requestPort();
-                await port.open({ baudRate: 115200 }); // Updated to match your ESP32 Serial.begin(115200)
+                await port.open({ baudRate: 115200 }); 
                 
                 controls.style.display = 'none';
                 statusText.innerText = "Status: USB Connected! (Diagnostic Mode)";
@@ -322,7 +326,6 @@
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
-                    // USB logic remains for legacy support, but relies on your specific serial prints
                     buffer += decoder.decode(value);
                 }
             } catch (error) {
@@ -340,7 +343,6 @@
             try {
                 statusText.innerText = "Status: Scanning for Amit_Nebulizer...";
                 
-                // THE EXPERT FIX: Strictly target the exact name you set in your C++ code!
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ name: "Amit_Nebulizer" }], 
                     optionalServices: [bleServiceUUID]
@@ -356,12 +358,8 @@
                 statusText.innerText = `Status: Connected to ${device.name}! Breathe now.`;
                 statusText.style.color = "#2196F3";
 
-                // --- NEW PAYLOAD PARSER FOR C++ IoT STRING ---
                 characteristic.addEventListener('characteristicvaluechanged', (event) => {
                     const valueStr = new TextDecoder().decode(event.target.value);
-                    
-                    // The ESP32 sends: "Pressure,Temp,Humidity,Relay,NFC" (e.g., "45,24.5,40.2,0,048010...")
-                    // We split by comma and grab the very first item ([0])
                     const dataParts = valueStr.split(',');
                     
                     if (dataParts.length > 0) {
@@ -374,6 +372,7 @@
                     controls.style.display = 'flex';
                     statusText.innerText = "Status: Nebulizer Disconnected.";
                     statusText.style.color = "#f44336";
+                    debugText.innerText = "Raw Pressure: --% | [IDLE] | Count: --/--";
                 });
 
             } catch (error) {
