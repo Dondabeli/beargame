@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bear Therapy UI</title>
+    <script src="https://unpkg.com/@rive-app/canvas@latest"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body { 
+            background: #121212; 
+            display: flex; flex-direction: column; 
+            align-items: center; justify-content: center; min-height: 100vh;
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+        
+        /* The Main 16:10 App Window */
+        .app-window {
+            position: relative;
+            width: 100%; max-width: 1200px; aspect-ratio: 16 / 10;
+            background-color: #d8e5ff; 
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+        }
+
+        /* Layer 1: The SVG Background */
+        .bg-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+
+        /* Layer 2: The UI Cards */
+        .ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 3;
+            pointer-events: none; 
+        }
+
+        /* Interactive UI Elements */
+        .btn-home { 
+            position: absolute; top: 30px; left: 30px; width: 60px; 
+            pointer-events: auto; cursor: pointer; transition: transform 0.2s;
+        }
+        .btn-home:hover { transform: scale(1.05); }
+
+        .btn-sound { 
+            position: absolute; top: 30px; right: 30px; width: 60px; 
+            pointer-events: auto; cursor: pointer; transition: transform 0.2s;
+        }
+        .btn-sound:hover { transform: scale(1.05); }
+
+        .card-left { position: absolute; top: 150px; left: 40px; width: 220px; }
+        
+        /* Layer 3A: The Bear Canvas */
+        .canvas-container {
+            position: absolute;
+            top: 15%; left: 50%; transform: translateX(-50%);
+            width: 45%; height: 75%;
+            z-index: 2;
+        }
+        canvas { width: 100%; height: 100%; outline: none; }
+
+        /* --- NATIVE SVG PROGRESS RING --- */
+        .native-progress-container {
+            position: absolute; 
+            top: 180px; 
+            right: 50px; 
+            width: 180px; height: 180px; 
+            z-index: 99; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            filter: drop-shadow(0px 8px 12px rgba(0,0,0,0.15)); 
+        }
+
+        .progress-ring {
+            transform: rotate(-90deg); 
+        }
+
+        .progress-ring-track {
+            fill: transparent;
+            stroke: #ffffff;
+            stroke-width: 16px;
+        }
+
+        .progress-ring-fill {
+            fill: transparent;
+            stroke: #a2e822; 
+            stroke-width: 16px;
+            stroke-linecap: round;
+            stroke-dasharray: 440; 
+            stroke-dashoffset: 440; 
+            transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .progress-text {
+            position: absolute;
+            font-size: 42px;
+            font-weight: 900;
+            color: #4b3b8c;
+            transition: transform 0.2s ease-out; 
+        }
+        
+        /* Bottom Pill Bar & Dynamic Text */
+        .bottom-bar-container {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 400px; text-align: center;
+        }
+        .bottom-bar-img { width: 100%; }
+        
+        .dynamic-bottom-text {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 100%; font-size: 18px; font-weight: 700; color: #4b3b8c;
+            pointer-events: none; transition: color 0.3s ease;
+        }
+
+        /* --- HARDWARE CONNECT BUTTONS (DUAL MODE) --- */
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .connect-btn { 
+            padding: 15px 25px; 
+            font-size: 16px; 
+            font-weight: bold;
+            cursor: pointer; 
+            border-radius: 12px; 
+            border: none; 
+            transition: transform 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .connect-btn:hover { transform: scale(1.05); }
+        
+        #btnUsb { background: #4CAF50; color: white; }
+        #btnBle { background: #2196F3; color: white; }
+        
+        .status-text {
+            margin-top: 10px; font-size: 14px; color: #888; font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-window">
+        <img class="bg-layer" src="./assets/background.svg" alt="Stage Background">
+
+        <div class="canvas-container">
+            <canvas id="riveCanvas"></canvas>
+        </div>
+
+        <div class="native-progress-container">
+            <svg class="progress-ring" width="180" height="180">
+                <circle class="progress-ring-track" cx="90" cy="90" r="70"></circle>
+                <circle id="progressCircle" class="progress-ring-fill" cx="90" cy="90" r="70"></circle>
+            </svg>
+            <div id="progressText" class="progress-text">0</div>
+        </div>
+
+        <div class="ui-layer">
+            <img class="btn-home" src="./assets/btn-home.svg" alt="Home" onclick="window.location.href='https://nebulisergame.netlify.app/'">
+            
+            <img id="soundBtn" class="btn-sound" src="./assets/sound-off.svg" alt="Toggle Sound" onclick="toggleSound()">
+            <audio id="bgMusic" src="./assets/bg-music.mp3" loop></audio>
+
+            <img class="card-left" src="./assets/card-how-to-play.svg" alt="How to Play">
+            
+            <div class="bottom-bar-container">
+                <img class="bottom-bar-img" src="./assets/bottom-bar.svg" alt="Breath Bar">
+                <div id="dynamicBottomText" class="dynamic-bottom-text">Blow OUT to get ready...</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="button-group" id="controls">
+        <button id="btnUsb" class="connect-btn" onclick="connectUSB()">🔌 Wired (USB)</button>
+        <button id="btnBle" class="connect-btn" onclick="connectBLE()">📡 Wireless (BLE)</button>
+    </div>
+    <div id="statusText" class="status-text">Hardware Disconnected</div>
+
+    <script>
+        // --- CALIBRATED STATE MACHINE VARIABLES ---
+        let isArmed = false;    
+        let isDancing = false;  
+        let mainAnimName = ""; 
+        
+        // --- PROGRESS TRACKER VARIABLES ---
+        let breathCount = 0;
+        const MAX_BREATHS = 5;
+        
+        // DOM Elements
+        const progressCircle = document.getElementById("progressCircle");
+        const progressText = document.getElementById("progressText");
+        const CIRCUMFERENCE = 440; 
+        
+        let isMusicPlaying = false;
+        const bgMusic = document.getElementById("bgMusic");
+        const soundBtn = document.getElementById("soundBtn");
+        
+        const statusText = document.getElementById("statusText");
+        const bottomText = document.getElementById("dynamicBottomText");
+        const controls = document.getElementById("controls");
+
+        function toggleSound() {
+            if (isMusicPlaying) {
+                bgMusic.pause();
+                soundBtn.src = "./assets/sound-off.svg"; 
+                isMusicPlaying = false;
+            } else {
+                bgMusic.play();
+                soundBtn.src = "./assets/sound-on.svg"; 
+                isMusicPlaying = true;
+            }
+        }
+
+        // --- RIVE INITIALIZATION ---
+        const rBear = new rive.Rive({
+            src: "./bear.riv", 
+            canvas: document.getElementById("riveCanvas"),
+            autoplay: true, 
+            layout: new rive.Layout({ fit: rive.Fit.Contain, alignment: rive.Alignment.Center }),
+            onLoad: () => {
+                rBear.resizeDrawingSurfaceToCanvas();
+                if (rBear.stateMachineNames && rBear.stateMachineNames.length > 0) {
+                    mainAnimName = rBear.stateMachineNames[0];
+                } else if (rBear.animationNames && rBear.animationNames.length > 0) {
+                    mainAnimName = rBear.animationNames[0];
+                }
+                setTimeout(() => { rBear.pause(); }, 50);
+            },
+        });
+
+        // --- NATIVE PROGRESS RING UPDATER ---
+        function updateProgressUI() {
+            const percentage = (breathCount / MAX_BREATHS) * 100;
+            const offset = CIRCUMFERENCE - (percentage / 100) * CIRCUMFERENCE;
+            
+            progressCircle.style.strokeDashoffset = offset;
+            progressText.innerText = Math.round(percentage);
+            progressText.style.transform = 'scale(1.2)';
+            setTimeout(() => { progressText.style.transform = 'scale(1)'; }, 200);
+        }
+
+        // --- THE INHALATION STATE MACHINE LOGIC ---
+        function processBreathData(value) {
+            if (isNaN(value)) return;
+            if (breathCount >= MAX_BREATHS) return;
+
+            let debugState = isDancing ? "[DANCING]" : (isArmed ? "[ARMED]" : "[IDLE]");
+            // Log to console instead of screen to preserve connection status text
+            console.log(`Raw Pressure: ${value}% | ${debugState} | Count: ${breathCount}/${MAX_BREATHS}`);
+
+            if (isDancing) return; 
+
+            if (value >= 12 && !isArmed) {
+                isArmed = true; 
+                bottomText.innerText = "Great! Now take a deep breath IN!";
+                bottomText.style.color = "#FF8FD9"; 
+            } 
+            else if (value <= 8 && isArmed) {
+                isDancing = true; 
+                isArmed = false; 
+                
+                breathCount++;
+                updateProgressUI();
+
+                bottomText.innerText = "Awesome breathing!";
+                bottomText.style.color = "#4b3b8c"; 
+                
+                if (mainAnimName) {
+                    rBear.stop(mainAnimName); 
+                    rBear.play(mainAnimName); 
+                } else {
+                    rBear.play(); 
+                }
+                
+                setTimeout(() => {
+                    rBear.pause(); 
+                    isDancing = false; 
+                    
+                    if (breathCount >= MAX_BREATHS) {
+                        bottomText.innerText = "Therapy Complete! Great Job!";
+                        bottomText.style.color = "#4CAF50"; 
+                    } else {
+                        bottomText.innerText = "Blow OUT to get ready...";
+                    }
+                }, 5000); 
+            }
+            else if (value < 12 && !isArmed && breathCount < MAX_BREATHS) {
+                bottomText.innerText = "Blow OUT to get ready...";
+                bottomText.style.color = "#4b3b8c";
+            }
+        }
+
+        // --- 1. WIRED CONNECTION (WEB SERIAL) ---
+        // Note: Your ESP32 C++ code doesn't rapidly print the CSV to Serial for the game loop, 
+        // it only prints a diagnostic block every 2 seconds. 
+        // For actual gameplay, use the Bluetooth button!
+        async function connectUSB() {
+            try {
+                const port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 }); // Updated to match your ESP32 Serial.begin(115200)
+                
+                controls.style.display = 'none';
+                statusText.innerText = "Status: USB Connected! (Diagnostic Mode)";
+                statusText.style.color = "#4CAF50";
+                
+                const reader = port.readable.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    // USB logic remains for legacy support, but relies on your specific serial prints
+                    buffer += decoder.decode(value);
+                }
+            } catch (error) {
+                console.error(error);
+                statusText.innerText = "Status: USB Connection Failed.";
+                statusText.style.color = "#f44336";
+            }
+        }
+
+        // --- 2. WIRELESS CONNECTION (WEB BLUETOOTH) ---
+        async function connectBLE() {
+            const bleServiceUUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+            const bleCharUUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+
+            try {
+                statusText.innerText = "Status: Scanning for Amit_Nebulizer...";
+                
+                // THE EXPERT FIX: Strictly target the exact name you set in your C++ code!
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: "Amit_Nebulizer" }], 
+                    optionalServices: [bleServiceUUID]
+                });
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(bleServiceUUID);
+                const characteristic = await service.getCharacteristic(bleCharUUID);
+
+                await characteristic.startNotifications();
+                
+                controls.style.display = 'none';
+                statusText.innerText = `Status: Connected to ${device.name}! Breathe now.`;
+                statusText.style.color = "#2196F3";
+
+                // --- NEW PAYLOAD PARSER FOR C++ IoT STRING ---
+                characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                    const valueStr = new TextDecoder().decode(event.target.value);
+                    
+                    // The ESP32 sends: "Pressure,Temp,Humidity,Relay,NFC" (e.g., "45,24.5,40.2,0,048010...")
+                    // We split by comma and grab the very first item ([0])
+                    const dataParts = valueStr.split(',');
+                    
+                    if (dataParts.length > 0) {
+                        const pressureValue = parseInt(dataParts[0], 10);
+                        processBreathData(pressureValue);
+                    }
+                });
+
+                device.addEventListener('gattserverdisconnected', () => {
+                    controls.style.display = 'flex';
+                    statusText.innerText = "Status: Nebulizer Disconnected.";
+                    statusText.style.color = "#f44336";
+                });
+
+            } catch (error) {
+                console.error("BLE Error: ", error);
+                statusText.innerText = "Status: Bluetooth Pairing Failed or Canceled.";
+                statusText.style.color = "#f44336";
+            }
+        }
+    </script>
+</body>
+</html>
